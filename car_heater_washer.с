@@ -1,0 +1,257 @@
+#define _LCD_TYPE 1
+#define AUTO_START A0
+#define AUTO_STOP 2 //D2
+#define K1 4
+#define K2 5 
+#define K3 6
+#define K4 7 
+#define PUMP 8 //pump
+#define MAN1 A1 //K1 K3
+#define MAN2 A2 //K2 K4
+#define START_PUMP A3
+#define SET 9
+#define TIME_UP 10
+#include <LCD_1602_RUS_ALL.h>
+
+LCD_1602_RUS lcd(0x27, 16, 2);
+
+void setup() {
+  pinMode(K1, OUTPUT);
+  digitalWrite(K1, 1);
+  pinMode(K2, OUTPUT);
+  digitalWrite(K2, 1);
+  pinMode(K3, OUTPUT); 
+  digitalWrite(K3, 1);
+  pinMode(K4, OUTPUT);
+  digitalWrite(K4, 1);
+  pinMode(PUMP, OUTPUT);
+  digitalWrite(PUMP, 1);
+  pinMode(AUTO_START, INPUT);
+  pinMode(MAN1, INPUT);
+  pinMode(MAN2, INPUT); 
+  pinMode(START_PUMP, INPUT);
+  pinMode(SET, INPUT_PULLUP);
+  pinMode(TIME_UP, INPUT_PULLUP);
+  pinMode(11, OUTPUT);
+  digitalWrite(11, 0);  
+  lcd.init(); 
+  lcd.backlight();
+  showStartScreen();   
+  Serial.begin(9600);
+  attachInterrupt(0,autoCycleStop,RISING);  
+}
+
+int pumpStartAndStopDelay = 3000;
+volatile int number_of_cycle = 0;
+int pause = 1;
+  
+void loop() { 
+  if (digitalRead(AUTO_START) == HIGH){
+    autoCycleStart();
+  }
+
+  if (digitalRead(MAN1) == HIGH) {  
+    manual_mode_1();
+  }
+
+  if (digitalRead(MAN2) == HIGH) {
+    manual_mode_2();
+  }
+
+  if (digitalRead(TIME_UP) == LOW) {
+    changePauseTime();
+  }
+}
+
+
+void print_message(int number_of_cycle){
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(">Циклов прошло:");
+  lcd.setCursor(0, 1);
+  String myStr = String(number_of_cycle);
+  lcd.setCursor(7, 1);
+  lcd.print(myStr);
+}
+
+void autoCycleStart(){
+  long int pauseInMinits = pause * 60000 - 6000;
+  while(true){
+    if (checkNumberOfCycle()) break;
+    
+    print_message(number_of_cycle);  
+    number_of_cycle++;
+    
+    digitalWrite(K1, 0);
+    digitalWrite(K3, 0);
+    pumpDelay(pumpStartAndStopDelay);   
+    digitalWrite(PUMP, 0);
+    pumpDelay(pauseInMinits);
+    
+    if (checkNumberOfCycle()) break;
+    
+    digitalWrite(PUMP, 1);
+    pumpDelay(pumpStartAndStopDelay);  
+    digitalWrite(K1, 1);
+    digitalWrite(K3, 1);
+    digitalWrite(K2, 0);
+    digitalWrite(K4, 0);
+    pumpDelay(pumpStartAndStopDelay);      
+    digitalWrite(PUMP, 0);
+    pumpDelay(pauseInMinits);
+
+    if (checkNumberOfCycle()) break;
+     
+    digitalWrite(PUMP, 1);
+    pumpDelay(pumpStartAndStopDelay);  
+    digitalWrite(K2, 1);
+    digitalWrite(K4, 1);
+    print_message(number_of_cycle); 
+  } 
+}
+
+void autoCycleStop(){
+  number_of_cycle = -1;
+}
+
+void finishAutoMode(){
+    digitalWrite(PUMP, 1);
+    pumpDelay(pumpStartAndStopDelay);
+    digitalWrite(K1, 1);
+    digitalWrite(K2, 1); 
+    digitalWrite(K3, 1);
+    digitalWrite(K4, 1);
+    showStartScreen();
+}
+
+void pumpDelay(long int setDelay){
+    long int begin = millis();
+    long int next = 0;
+    while(true){
+      next = millis() - begin;      
+      if (next > setDelay){
+        break;        
+      } 
+      if (number_of_cycle == -1){
+      break; 
+      }
+      // Serial.println(next);      
+    }
+}
+
+void manual_mode_2(){
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(">Клапан #2 #4");
+  digitalWrite(K2, 0);
+  digitalWrite(K4, 0);
+  while(true){
+        if (digitalRead(START_PUMP) == HIGH) {
+      start_pump();
+    }
+    if (digitalRead(MAN2) == LOW){
+      digitalWrite(K2, 1);
+      digitalWrite(K4, 1);
+      showStartScreen();
+      break;            
+    }
+  }  
+}
+
+void manual_mode_1(){
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(">Клапан #1 #3");
+  digitalWrite(K1, 0);
+  digitalWrite(K3, 0);
+  while(true){
+    if (digitalRead(START_PUMP) == HIGH) {
+      start_pump();
+    }
+    if (digitalRead(MAN1) == LOW){
+      digitalWrite(K1, 1);
+      digitalWrite(K3, 1);
+      showStartScreen();
+      break;            
+    }
+  }  
+}
+
+void start_pump(){
+  digitalWrite(PUMP, 0);
+  lcd.setCursor(0, 1);
+  lcd.print(">Насос в работе");
+  while(true){
+    if (digitalRead(START_PUMP) == LOW){
+      digitalWrite(PUMP, 1);
+      lcd.setCursor(0, 1);  
+      lcd.print("                ");        
+      break;            
+    }
+  }  
+}
+
+
+void showStartScreen(){
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(">Промыватель");
+  lcd.setCursor(11, 1);
+  lcd.print("3000<");    
+}
+
+void changePauseTime(){
+ delay(250);
+    lcd.clear();
+    lcd.setCursor(0, 0);    
+    lcd.print(">Время цикла:");
+    if (pause == 10){
+      lcd.setCursor(5, 1); 
+    }
+    else{
+      lcd.setCursor(6, 1);    
+    }      
+    lcd.print(String(pause));
+    lcd.setCursor(8, 1);  
+    lcd.print("мин.");     
+    while(digitalRead(SET) != LOW){ 
+      if (digitalRead(TIME_UP) == LOW) {
+        delay(250);
+        pause++;
+        if (pause > 10){
+          pause = 1;
+          lcd.clear();
+          lcd.setCursor(0, 0);    
+          lcd.print(">Время цикла:");
+          lcd.setCursor(6, 1);    
+          lcd.print(String(pause));
+          lcd.setCursor(8, 1);  
+          lcd.print("мин.");              
+        }
+        if (pause == 10){
+          lcd.setCursor(5, 1);    
+          lcd.print(String(pause));         
+        }
+        else {
+          lcd.setCursor(6, 1);    
+          lcd.print(String(pause));
+        }
+        lcd.setCursor(8, 1);  
+        lcd.print("мин.");    
+      }
+    }
+    delay(250);
+    showStartScreen();    
+}
+
+int checkNumberOfCycle(){
+    if (number_of_cycle == -1){
+      number_of_cycle = 0;
+      finishAutoMode();
+      return 1;
+    }
+    return 0;  
+}
+
+
+
