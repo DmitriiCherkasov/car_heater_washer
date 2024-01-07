@@ -1,5 +1,5 @@
 # car_heater_washer
-This project for car washing machine;
+This project for car heater washing machine;
 # Hardware:
 - arduino uno;
 - 1602 lcd display;
